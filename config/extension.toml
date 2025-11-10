@@ -1,0 +1,19 @@
+[package]
+title = "Ground Contact Report Demo"
+description = "Spawns falling objects and prints PhysX contact impulses when they touch the ground."
+category = "simulation"
+version = "0.1.0"
+authors = ["khemoo"]
+readme = "docs/README.md"
+repository = ""
+keywords = ["physx", "contacts", "demo"]
+writeTarget.kit = true
+
+[dependencies]
+"omni.physx" = {}
+"omni.timeline" = {}
+"omni.usd" = {}
+"omni.kit.uiapp" = {}
+
+[[python.module]]
+name = "khemoo.examples.contact_reports"
