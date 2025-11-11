@@ -1,12 +1,12 @@
 [package]
-title = "Ground Contact Report Demo"
-description = "Spawns falling objects and prints PhysX contact impulses when they touch the ground."
+title = "Contact Report Utility"
+description = "Spawns falling objects and prints PhysX contact impulses for arbitrary monitored prims."
 category = "simulation"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["khemoo"]
 readme = "docs/README.md"
 repository = ""
-keywords = ["physx", "contacts", "demo"]
+keywords = ["physx", "contacts", "monitoring"]
 writeTarget.kit = true
 
 [dependencies]

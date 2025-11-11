@@ -5,6 +5,8 @@ from typing import List, Optional
 import carb
 import omni.ui as ui
 
+DEFAULT_TARGET_PATH = "/World/ContactReport/Ground"
+
 
 class ContactReportUI:
     """Simple standalone window (used by the SimulationApp example)."""
@@ -12,7 +14,7 @@ class ContactReportUI:
     def __init__(self, reporter, window_title: str = "Contact Report Controls"):
         self._reporter = reporter
         self._window = ui.Window(window_title, width=320, height=200)
-        self._target_model = ui.SimpleStringModel("/World/ContactReportDemo/Ground")
+        self._target_model = ui.SimpleStringModel(DEFAULT_TARGET_PATH)
         self._cube_model = ui.SimpleIntModel(2)
         self._sphere_model = ui.SimpleIntModel(2)
         self._height_model = ui.SimpleFloatModel(3.0)
@@ -33,7 +35,7 @@ class ContactReportUIBuilder:
         self.frames: List[ui.AbstractItem] = []
         self.wrapped_ui_elements: List[ui.Widget] = []
         self._reporter = None
-        self._target_model = ui.SimpleStringModel("/World/ContactReportDemo/Ground")
+        self._target_model = ui.SimpleStringModel(DEFAULT_TARGET_PATH)
         self._cube_model = ui.SimpleIntModel(2)
         self._sphere_model = ui.SimpleIntModel(2)
         self._height_model = ui.SimpleFloatModel(3.0)
@@ -65,7 +67,7 @@ class ContactReportUIBuilder:
     @staticmethod
     def build_layout(reporter, target_model, cube_model, sphere_model, height_model):
         with ui.VStack(spacing=6, height=0):
-            ui.Label("Contact target prim path", height=0)
+            ui.Label("Contact target prim path(s) (comma separated)", height=0)
             ui.StringField(model=target_model)
             ui.Button("Set Target", clicked_fn=lambda: ContactReportUIBuilder._apply_target(reporter, target_model))
 
@@ -104,7 +106,7 @@ class ContactReportUIBuilder:
                         ui.Label(line, height=0)
 
     def _reset_models(self) -> None:
-        self._target_model.set_value("/World/ContactReportDemo/Ground")
+        self._target_model.set_value(DEFAULT_TARGET_PATH)
         self._cube_model.set_value(2)
         self._sphere_model.set_value(2)
         self._height_model.set_value(3.0)
@@ -114,11 +116,12 @@ class ContactReportUIBuilder:
         if reporter is None:
             carb.log_warn("[ContactReportUI] Reporter not ready yet.")
             return
-        target = target_model.get_value_as_string()
-        if not target:
-            carb.log_warn("[ContactReportUI] Target path is empty.")
+        raw_value = target_model.get_value_as_string()
+        targets = ContactReportUIBuilder._parse_target_entries(raw_value)
+        if not targets:
+            carb.log_warn("[ContactReportUI] Target path list is empty.")
             return
-        reporter.set_contact_target(target)
+        reporter.set_contact_targets(targets)
 
     @staticmethod
     def _spawn_objects(reporter, cube_model, sphere_model) -> None:
@@ -148,3 +151,10 @@ class ContactReportUIBuilder:
         carb.log_info(
             "[ContactReportUI] Spawn height set to %.2f m" % height_model.get_value_as_float()
         )
+
+    @staticmethod
+    def _parse_target_entries(raw_value: str) -> List[str]:
+        if not raw_value:
+            return []
+        normalized = raw_value.replace("\n", ",").split(",")
+        return [entry.strip() for entry in normalized if entry.strip()]

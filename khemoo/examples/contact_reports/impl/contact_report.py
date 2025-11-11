@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Sequence, Set
 
 import carb
 from omni.physx import get_physx_simulation_interface
@@ -18,18 +18,18 @@ class ContactEvent:
     position: Gf.Vec3f
 
 
-class GroundContactReporter:
-    """Creates a simple arena with falling shapes and prints PhysX contact impulses."""
+class ContactReporter:
+    """Creates a simple arena with falling shapes and prints PhysX contact impulses for arbitrary prims."""
 
     def __init__(
         self,
         stage,
-        root_prim_path: str = "/World/ContactReportDemo",
+        root_prim_path: str = "/World/ContactReport",
     ) -> None:
         self._stage = stage
         self._root_path = Sdf.Path(root_prim_path)
         self._subscription = None
-        self._monitored_prim_path: Optional[Sdf.Path] = None
+        self._monitored_prim_paths: Set[str] = set()
         self._spawn_interval = -1.0
         self._remaining_cubes = 0
         self._remaining_spheres = 0
@@ -40,6 +40,7 @@ class GroundContactReporter:
         self._batch_size = 1
         self._next_spawn_time = 0.0
         self._event_log: List[str] = []
+        self._log_prefix = "[ContactReport]"
 
     def generate(
         self,
@@ -51,16 +52,29 @@ class GroundContactReporter:
         random_seed: int = 7,
         spawn_interval: float = 0.5,
         batch_size: int = 2,
+        monitor_paths: Optional[Sequence[str]] = None,
     ) -> None:
         """Populate the stage and start listening for contacts."""
         carb.log_info(
-            f"[ContactReportDemo] Spawning {cube_count} cubes + {sphere_count} spheres at {self._root_path}"
+            f"{self._log_prefix} spawning {cube_count} cubes + {sphere_count} spheres at {self._root_path}"
         )
         random.seed(random_seed)
         self._setup_world()
-        if not self._stage.GetPrimAtPath(self._root_path.AppendChild("Ground")):
-            self._spawn_ground()
+
+        default_target: Optional[str] = None
+        ground_path = self._root_path.AppendChild("Ground")
+        ground_prim = self._stage.GetPrimAtPath(ground_path)
+        if not ground_prim:
+            default_target = self._spawn_ground()
+        else:
+            self._enable_contact_reporting(ground_prim)
+            default_target = str(ground_path)
+
         self._subscribe_contacts()
+        if monitor_paths:
+            self.set_contact_targets(monitor_paths)
+        elif not self._monitored_prim_paths and default_target:
+            self.set_contact_target(default_target)
 
         self._remaining_cubes = cube_count
         self._remaining_spheres = sphere_count
@@ -100,7 +114,7 @@ class GroundContactReporter:
         self._remaining_spheres = 0
         self._cube_index = 0
         self._sphere_index = 0
-        carb.log_info("[ContactReportDemo] Removed %d spawned prims" % len(to_remove))
+        carb.log_info(f"{self._log_prefix} removed {len(to_remove)} spawned prims")
 
     def _setup_world(self) -> None:
         if not self._stage.GetPrimAtPath(self._root_path):
@@ -115,7 +129,7 @@ class GroundContactReporter:
             light.AddTranslateOp().Set(Gf.Vec3f(2.0, -2.5, 3.0))
             light.AddOrientOp().Set(Gf.Quatf(0.9239, -0.3827, 0.0, 0.0))
 
-    def _spawn_ground(self) -> None:
+    def _spawn_ground(self) -> str:
         plane_path = self._root_path.AppendChild("Ground")
         physicsUtils.add_ground_plane(
             self._stage,
@@ -128,22 +142,43 @@ class GroundContactReporter:
         plane_prim = self._stage.GetPrimAtPath(str(plane_path))
         if not plane_prim or not plane_prim.IsValid():
             plane_prim = self._stage.DefinePrim(str(plane_path), "Xform")
-        ground_report = PhysxSchema.PhysxContactReportAPI.Apply(plane_prim)
-        ground_report.CreateThresholdAttr().Set(0.0)
-        self._monitored_prim_path = plane_path
+        self._enable_contact_reporting(plane_prim)
+        return str(plane_path)
 
-    def set_contact_target(self, prim_path: str) -> None:
-        prim = self._stage.GetPrimAtPath(prim_path)
-        if not prim:
-            prim = self._stage.DefinePrim(prim_path, "Xform")
+    def _enable_contact_reporting(self, prim) -> None:
         contact_api = PhysxSchema.PhysxContactReportAPI.Apply(prim)
         contact_api.CreateThresholdAttr().Set(0.0)
-        self._monitored_prim_path = Sdf.Path(prim_path)
-        carb.log_info(f"[ContactReportDemo] Now monitoring contacts against {prim_path}")
+
+    def set_contact_target(self, prim_path: str, *, append: bool = False) -> None:
+        """Monitor contacts for a single prim path."""
+        self.set_contact_targets([prim_path], append=append)
+
+    def set_contact_targets(self, prim_paths: Sequence[str], *, append: bool = False) -> None:
+        """Monitor contacts for one or more prim paths."""
+        if not prim_paths:
+            carb.log_warn(f"{self._log_prefix} no prim paths supplied to set_contact_targets.")
+            return
+        if not append:
+            self._monitored_prim_paths.clear()
+        normalized_paths = []
+        for raw_path in prim_paths:
+            if not raw_path:
+                continue
+            sdf_path = Sdf.Path(raw_path)
+            prim = self._stage.GetPrimAtPath(sdf_path)
+            if not prim:
+                prim = self._stage.DefinePrim(str(sdf_path), "Xform")
+            self._enable_contact_reporting(prim)
+            normalized_paths.append(str(sdf_path))
+            self._monitored_prim_paths.add(str(sdf_path))
+        if not normalized_paths:
+            carb.log_warn(f"{self._log_prefix} no valid prims supplied to monitor.")
+            return
+        carb.log_info(f"{self._log_prefix} now monitoring: {', '.join(normalized_paths)}")
 
     def set_spawn_height(self, height: float) -> None:
         self._spawn_height = max(0.0, float(height))
-        carb.log_info(f"[ContactReportDemo] Spawn height set to {self._spawn_height:.2f} m")
+        carb.log_info(f"{self._log_prefix} spawn height set to {self._spawn_height:.2f} m")
 
     def update(self, current_time: float) -> None:
         if self._spawn_interval < 0.0:
@@ -202,13 +237,12 @@ class GroundContactReporter:
             self._subscription = None
 
     def _on_contact_report(self, contact_headers, contact_data) -> None:
-        if not self._monitored_prim_path:
+        if not self._monitored_prim_paths:
             return
-        ground_path = str(self._monitored_prim_path)
         for header in contact_headers:
             actor0 = str(PhysicsSchemaTools.intToSdfPath(header.actor0))
             actor1 = str(PhysicsSchemaTools.intToSdfPath(header.actor1))
-            if ground_path not in (actor0, actor1):
+            if (actor0 not in self._monitored_prim_paths) and (actor1 not in self._monitored_prim_paths):
                 continue
             if header.num_contact_data == 0:
                 continue
@@ -217,7 +251,7 @@ class GroundContactReporter:
             for idx in contact_range:
                 impulse = contact_data[idx].impulse
                 impulse_x, impulse_y, impulse_z = impulse.x, impulse.y, impulse.z
-                impulse_amount = (impulse_x * impulse_x  + impulse_y * impulse_y + impulse_z * impulse_z) ** 0.5
+                impulse_amount = (impulse_x * impulse_x + impulse_y * impulse_y + impulse_z * impulse_z) ** 0.5
                 event = ContactEvent(
                     actor0=actor0,
                     actor1=actor1,
@@ -228,15 +262,8 @@ class GroundContactReporter:
 
     def _print_event(self, event: ContactEvent) -> None:
         message = (
-            "[ContactReportDemo] contact: actors=(%s, %s) | impulse=%.4f | pos=(%.3f, %.3f, %.3f)"
-            % (
-                event.actor0,
-                event.actor1,
-                event.impulse,
-                event.position[0],
-                event.position[1],
-                event.position[2],
-            )
+            f"{self._log_prefix} contact: actors=({event.actor0}, {event.actor1}) | "
+            f"impulse={event.impulse:.4f} | pos=({event.position[0]:.3f}, {event.position[1]:.3f}, {event.position[2]:.3f})"
         )
         carb.log_info(message)
         self._event_log.append(message)

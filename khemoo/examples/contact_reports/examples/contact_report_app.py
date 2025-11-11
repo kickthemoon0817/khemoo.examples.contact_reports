@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """
 Standalone SimulationApp demo that enables the `khemoo.examples.contact_reports` extension, spawns
-a ground plane plus falling shapes, and prints PhysX contact impulses when they hit the floor.
+a simple scene with falling shapes, and prints PhysX contact impulses when they touch monitored prims.
 """
 
 from isaacsim import SimulationApp
@@ -22,7 +22,7 @@ import omni.timeline  # noqa: E402,E401
 import omni.usd  # noqa: E402,E401
 
 from isaacsim.core.utils.extensions import enable_extension  # noqa: E402,E401
-from khemoo.examples.contact_reports import ContactReportUI, GroundContactReporter  # noqa: E402,E401
+from khemoo.examples.contact_reports import ContactReportUI, ContactReporter  # noqa: E402,E401
 
 EXTENSION_ID = "khemoo.examples.contact_reports"
 
@@ -41,8 +41,15 @@ def _get_stage():
 def main():
     _ensure_extension()
     stage = _get_stage()
-    reporter = GroundContactReporter(stage, "/World/ContactReportDemo")
-    reporter.generate(cube_count=6, sphere_count=6, spawn_height=3.5, spawn_interval=2.0, batch_size=2)
+    reporter = ContactReporter(stage, "/World/ContactReport")
+    reporter.generate(
+        cube_count=6,
+        sphere_count=6,
+        spawn_height=3.5,
+        spawn_interval=2.0,
+        batch_size=2,
+        monitor_paths=["/World/ContactReport/Ground"],
+    )
     ui_panel = ContactReportUI(reporter)
 
     timeline = omni.timeline.get_timeline_interface()

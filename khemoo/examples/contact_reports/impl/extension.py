@@ -9,14 +9,14 @@ import omni.usd
 from omni.kit.menu.utils import MenuItemDescription, add_menu_items, remove_menu_items
 from omni.physx.bindings import _physx as physx_settings
 
-from .contact_report_demo import GroundContactReporter
+from .contact_report import ContactReporter
 from .ui_builder import ContactReportUIBuilder
 
-EXTENSION_TITLE = "Contact Report Demo"
+EXTENSION_TITLE = "Contact Report"
 
 
 class ContactReportsExtension(omni.ext.IExt):
-    """Extension entry-point that wires the GroundContactReporter into an Omni.UI panel."""
+    """Extension entry-point that wires the ContactReporter into an Omni.UI panel."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -24,7 +24,7 @@ class ContactReportsExtension(omni.ext.IExt):
         self._settings = carb.settings.get_settings()
         self._usd_context = None
         self._window: Optional[ui.Window] = None
-        self._reporter: Optional[GroundContactReporter] = None
+        self._reporter: Optional[ContactReporter] = None
         self._ui_builder = ContactReportUIBuilder()
         self._menu_items = []
         self._stage_event_sub = None
@@ -71,7 +71,7 @@ class ContactReportsExtension(omni.ext.IExt):
             carb.log_error(f"[{EXTENSION_TITLE}] Unable to obtain a USD stage.")
             return
         if self._reporter is None:
-            self._reporter = GroundContactReporter(stage, "/World/ContactReportDemo")
+            self._reporter = ContactReporter(stage, "/World/ContactReport")
             # Defer spawning until user requests it; just ensure contact subscription is ready.
             self._reporter.generate(cube_count=0, sphere_count=0, spawn_height=3.0, spawn_interval=1.0, batch_size=1)
         self._ui_builder.bind_reporter(self._reporter)
